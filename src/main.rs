@@ -1,8 +1,10 @@
 extern crate base64;
 extern crate clap;
 
-use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::collections::BTreeMap;
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
 
 #[derive(PartialEq)]
 enum BoardArea {
@@ -19,7 +21,7 @@ enum BoardArea {
 /// then top-down. An unassigned cell holds value 0.
 /// An assigned cell holds the assigned value.
 fn unflatten(list: &[u8]) -> Vec<u8> {
-  let mut board = vec![0; 81];
+  let mut board = vec![0u8; 81];
   let mut cur: u8 = 0;
   let mut remaining: u8 = 0;
   enum State {
@@ -63,7 +65,7 @@ fn flatten(board: &[u8]) -> Vec<u8> {
   let mut occurrences: BTreeMap<u8, Vec<u8>> = BTreeMap::new();
   for i in 0u8..81 {
     let id: usize = i as usize;
-    if board[id] != 0 {
+    if board[id] != 0u8 {
       occurrences.entry(board[id]).or_default().push(i);
     }
   }
@@ -179,7 +181,7 @@ fn solve(board: &mut [u8], verbose: bool) -> usize {
       if verbose {
         println!("At scope of ({},{}) [{}], used: {:?}, free: {:?}", row, col, id(row, col), used, free);
       }
-      if board[id(row, col)] == 0 && free.len() == 1 {
+      if board[id(row, col)] == 0u8 && free.len() == 1 {
         board[id(row, col)] = *free.iter().next().unwrap();
         assigned += 1;
         if verbose {
@@ -204,7 +206,7 @@ fn solve(board: &mut [u8], verbose: bool) -> usize {
     // Go through all columns and record positions that can fulfill the missing value
     let mut candidates: BTreeMap<u8, Vec<usize>> = BTreeMap::new();
     for col in 0..9 {
-      if board[id(row, col)] == 0 { // unassigned cells only
+      if board[id(row, col)] == 0u8 { // unassigned cells only
         let used = get_used(&board, id(row, col), BoardArea::ALL);
         let free: BTreeSet<u8> = get_universe().difference(&used).cloned().collect();
         for value in &free {
@@ -242,7 +244,7 @@ fn solve(board: &mut [u8], verbose: bool) -> usize {
     // Go through all rows and record positions that can fulfill the missing value
     let mut candidates: BTreeMap<u8, Vec<usize>> = BTreeMap::new();
     for row in 0..9 {
-      if board[id(row, col)] == 0 { // unassigned cells only
+      if board[id(row, col)] == 0u8 { // unassigned cells only
         let used = get_used(&board, id(row, col), BoardArea::ALL);
         let free: BTreeSet<u8> = get_universe().difference(&used).cloned().collect();
         for value in &free {
@@ -282,7 +284,7 @@ fn solve(board: &mut [u8], verbose: bool) -> usize {
     for row in 0..3 {
       for col in 0..3 {
         let pos = start + 9 * row + col;
-        if board[pos] == 0 { // unassigned cells only
+        if board[pos] == 0u8 { // unassigned cells only
           let used = get_used(&board, pos, BoardArea::ALL);
           let free: BTreeSet<u8> = get_universe().difference(&used).cloned().collect();
           for value in &free {
@@ -428,7 +430,53 @@ fn main() {
     std::process::exit(0);
   }
   
-  // TODO: dynamic programming, branch on assignment of cells with minimal number of free values
-  println!("Finished solver, puzzle is unsolved.");
-  print_board(&board);
+  // Dynamic programming
+  // Branch on cells with minimal number of free values
+  if verbose {
+    println!("Finished initial solver");
+    print_board(&board);
+    println!("Starting dynamic programming");
+  }
+
+  // TODO: move below into function
+  // DFS with depth of branch
+  // How to store trial board states? (unflattened, flattened, seed?)
+
+  // Build priority queue (min-heap) of cells to branch on
+  #[derive(Copy, Clone, Eq, PartialEq)]
+  struct Branch {
+    _pos: usize,
+    _free: usize
+  }
+  impl Ord for Branch {
+    fn cmp(&self, other: &Branch) -> Ordering {
+      other._free.cmp(&self._free)
+        .then_with(|| other._pos.cmp(&self._pos))
+    }
+  }
+  impl PartialOrd for Branch {
+    fn partial_cmp(&self, other: &Branch) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+  }
+  let mut pq = BinaryHeap::new();
+  for row in 0..9 {
+    for col in 0..9 {
+      if board[id(row, col)] != 0u8 {
+        continue
+      }
+      let used = get_used(&board, id(row, col), BoardArea::ALL);
+      let free: BTreeSet<u8> = get_universe().difference(&used).cloned().collect();
+      pq.push(Branch {_pos: id(row, col), _free: free.len()});
+    }
+  }
+
+  //
+  while let Some(Branch {_pos, _free}) = pq.pop() {
+    let used = get_used(&board, _pos, BoardArea::ALL);
+    let free: BTreeSet<u8> = get_universe().difference(&used).cloned().collect();
+    if verbose {
+      println!("Position [{}] has {} free values: {:?}", _pos, _free, free);
+    }
+  }
 }
