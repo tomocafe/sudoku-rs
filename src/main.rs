@@ -168,7 +168,7 @@ fn get_missing(board: &[u8], area: BoardArea, start: usize) -> BTreeSet<u8> {
 ///
 /// Multiple rounds of solve may need to be called to solve the entire puzzle
 /// Returns the number of assignments made in this round
-fn solve(board: &mut [u8]) -> usize {
+fn solve(board: &mut [u8], verbose: bool) -> usize {
   let mut assigned: usize = 0;
 
   // Find used/free values for all cells
@@ -176,22 +176,31 @@ fn solve(board: &mut [u8]) -> usize {
     for col in 0..9 {
       let used = get_used(&board, id(row, col), BoardArea::ALL);
       let free: BTreeSet<u8> = get_universe().difference(&used).cloned().collect();
-      println!("At scope of ({},{}) [{}], used: {:?}, free: {:?}", row, col, id(row, col), used, free);
+      if verbose {
+        println!("At scope of ({},{}) [{}], used: {:?}, free: {:?}", row, col, id(row, col), used, free);
+      }
       if board[id(row, col)] == 0 && free.len() == 1 {
         board[id(row, col)] = *free.iter().next().unwrap();
         assigned += 1;
+        if verbose {
+          println!("Assign [{}] to {}", id(row, col), board[id(row, col)]);
+        }
       }
     }
   }
 
-  print_board(&board);
+  if verbose {
+    print_board(&board);
+  }
 
   // Cross-reference missing values in board areas with free values in their cells
 
   // Row
   for row in 0..9 {
     let missing = get_missing(&board, BoardArea::ROW, id(row, 0));
-    println!("At row {}, missing: {:?}", row, missing);
+    if verbose {
+      println!("At row {}, missing: {:?}", row, missing);
+    }
     // Go through all columns and record positions that can fulfill the missing value
     let mut candidates: BTreeMap<u8, Vec<usize>> = BTreeMap::new();
     for col in 0..9 {
@@ -207,22 +216,29 @@ fn solve(board: &mut [u8]) -> usize {
     }
     // If any missing value can only be fulfilled by one position, assign it
     for (value, positions) in &candidates {
-      if positions.len() > 0 {
+      if verbose && positions.len() > 0 {
         println!("Value {} can be fulfilled by positions: {:?}", value, positions);
       }
       if positions.len() == 1 {
         board[positions[0]] = *value;
         assigned += 1;
+        if verbose {
+          println!("Assign [{}] to {}", positions[0], *value);
+        }
       }
     }
   }
 
-  print_board(&board);
+  if verbose {
+    print_board(&board);
+  }
 
   // Column
   for col in 0..9 {
     let missing = get_missing(&board, BoardArea::COL, id(0, col));
-    println!("At column {}, missing: {:?}", col, missing);
+    if verbose {
+      println!("At column {}, missing: {:?}", col, missing);
+    }
     // Go through all rows and record positions that can fulfill the missing value
     let mut candidates: BTreeMap<u8, Vec<usize>> = BTreeMap::new();
     for row in 0..9 {
@@ -238,22 +254,29 @@ fn solve(board: &mut [u8]) -> usize {
     }
     // If any missing value can only be fulfilled by one position, assign it
     for (value, positions) in &candidates {
-      if positions.len() > 0 {
+      if verbose && positions.len() > 0 {
         println!("Value {} can be fulfilled by positions: {:?}", value, positions);
       }
       if positions.len() == 1 {
         board[positions[0]] = *value;
         assigned += 1;
+        if verbose {
+          println!("Assign [{}] to {}", positions[0], *value);
+        }
       }
     }
   }
 
-  print_board(&board);
+  if verbose {
+    print_board(&board);
+  }
 
   // Region
   for start in vec![0, 3, 6, 27, 30, 33, 54, 57, 60] {
     let missing = get_missing(&board, BoardArea::REGION, start);
-    println!("At region {}, missing: {:?}", start, missing);
+    if verbose {
+      println!("At region {}, missing: {:?}", start, missing);
+    }
     // Go through all cells of the region and record positions that can fulfill the missing value
     let mut candidates: BTreeMap<u8, Vec<usize>> = BTreeMap::new();
     for row in 0..3 {
@@ -272,18 +295,23 @@ fn solve(board: &mut [u8]) -> usize {
     }
     // If any missing value can only be fulfilled by one position, assign it
     for (value, positions) in &candidates {
-      if positions.len() > 0 {
+      if verbose && positions.len() > 0 {
         println!("Value {} can be fulfilled by positions: {:?}", value, positions);
       }
       if positions.len() == 1 {
         board[positions[0]] = *value;
         assigned += 1;
+        if verbose {
+          println!("Assign [{}] to {}", positions[0], *value);
+        }
       }
     }
   }
 
-  println!("Made {} assignments", assigned);
-  print_board(&board);
+  if verbose {
+    println!("Made {} assignments", assigned);
+    print_board(&board);
+  }
   
   assigned
 }
@@ -320,11 +348,18 @@ fn main() {
       .help("full list-based board state")
       .multiple(true)
       .takes_value(true))
+    .arg(clap::Arg::with_name("verbose")
+      .short("-v")
+      .long("--verbose")
+      .help("show solver steps")
+      .takes_value(false))
     .group(clap::ArgGroup::with_name("input")
       .args(&["seed", "list", "board"])
       .required(true)
       .multiple(false))
     .get_matches();
+
+  let verbose: bool = args.is_present("verbose");
 
   // Generate the seed, flattened list, and unflattened board
   let seed: String;
@@ -349,33 +384,51 @@ fn main() {
     list = flatten(&board);
     seed = base64::encode(&list).to_string();
   }
-  println!("List is {:?}", list);
-  println!("Seed is {}", seed);
 
-  // Print game board positions (indices)
-  for row in 0..9 {
-    for col in 0..9 {
-      print!("{:3}", id(row, col));
-    }
-    println!();
+  if ! args.is_present("seed") {
+    println!("Game seed is {}", seed);
   }
-  println!("---");
 
-  // Print the board state
+  if verbose {
+    println!("Printing board indices");
+    for row in 0..9 {
+      for col in 0..9 {
+        print!("{:3}", id(row, col));
+      }
+      println!();
+    }
+    println!("---");
+  }
+
+  // Print the initial board state
   print_board(&board);
 
   // Testing: rebuild the list and seed
-  let rebuilt_list = flatten(&board);
-  let rebuilt_seed = base64::encode(&rebuilt_list).to_string();
-  println!("Rebuilt list {:?}", rebuilt_list);
-  println!("Rebuild seed {}", rebuilt_seed);
-
-  let mut assigned: usize = 1;
-  while assigned > 0 && ! is_solved(&board) {
-    assigned = solve(&mut board);
+  if verbose {
+    let rebuilt_list = flatten(&board);
+    let rebuilt_seed = base64::encode(&rebuilt_list).to_string();
+    if rebuilt_seed != seed {
+      println!("Canonical form of game seed is {}", rebuilt_seed);
+    }
   }
 
-  // Print the board state
-  println!("Finished solver");
+  let mut round: usize = 0;
+  let mut assigned: usize = 1;
+  while assigned > 0 && ! is_solved(&board) {
+    round += 1;
+    if verbose {
+      println!("Round {}", round);
+    }
+    assigned = solve(&mut board, verbose);
+  }
+
+  if is_solved(&board) {
+    println!("Finished solver, puzzle is solved.");
+    print_board(&board);
+    std::process::exit(0);
+  }
+  
+  // TODO: dynamic programming, branch on assignment of cells with minimal number of free values
+  println!("Finished solver, puzzle is unsolved.");
   print_board(&board);
 }
