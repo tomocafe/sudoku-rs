@@ -1,5 +1,7 @@
 extern crate base64;
 extern crate clap;
+#[macro_use]
+extern crate lazy_static;
 
 use std::collections::BTreeSet;
 use std::collections::BTreeMap;
@@ -13,6 +15,13 @@ enum BoardArea {
   COL,
   REGION,
   ALL
+}
+
+// Static universe set (values 1 to 9)
+lazy_static! {
+  static ref U: BTreeSet<u8> = {
+    (1u8..10u8).into_iter().collect()
+  };
 }
 
 /// Unflattens a list into an uncompressed game board
@@ -111,13 +120,6 @@ fn get_region_start(i: usize) -> usize {
   ((i / 27) * 27) + (((i % 9) / 3) * 3)
 }
 
-/// Return a static, unmutable universe set (values 1 to 9)
-fn get_universe() -> BTreeSet<u8> {
-  // TODO: make this static?
-  let universe: BTreeSet<u8> = (1u8..10u8).into_iter().collect();
-  universe
-}
-
 /// Return a set of used values in the scope of the given cell
 ///
 /// Checks the cell's row, column, and region
@@ -164,7 +166,7 @@ fn get_used(board: &[u8], i: usize, area: BoardArea) -> BTreeSet<u8> {
 /// `start` must be a valid starting index of the corresponding area
 fn get_missing(board: &[u8], area: BoardArea, start: usize) -> BTreeSet<u8> {
   let used: BTreeSet<u8> = get_used(&board, start, area);
-  get_universe().difference(&used).cloned().collect()
+  U.difference(&used).cloned().collect()
 }
 
 /// Assign values to unassigned cells in the board
@@ -178,7 +180,7 @@ fn solve(board: &mut [u8], verbose: bool) -> usize {
   for row in 0..9 {
     for col in 0..9 {
       let used = get_used(&board, id(row, col), BoardArea::ALL);
-      let free: BTreeSet<u8> = get_universe().difference(&used).cloned().collect();
+      let free: BTreeSet<u8> = U.difference(&used).cloned().collect();
       if verbose {
         println!("At scope of ({},{}) [{}], used: {:?}, free: {:?}", row, col, id(row, col), used, free);
       }
@@ -209,7 +211,7 @@ fn solve(board: &mut [u8], verbose: bool) -> usize {
     for col in 0..9 {
       if board[id(row, col)] == 0u8 { // unassigned cells only
         let used = get_used(&board, id(row, col), BoardArea::ALL);
-        let free: BTreeSet<u8> = get_universe().difference(&used).cloned().collect();
+        let free: BTreeSet<u8> = U.difference(&used).cloned().collect();
         for value in &free {
           if missing.contains(&value) {
             candidates.entry(*value).or_default().push(id(row, col));
@@ -247,7 +249,7 @@ fn solve(board: &mut [u8], verbose: bool) -> usize {
     for row in 0..9 {
       if board[id(row, col)] == 0u8 { // unassigned cells only
         let used = get_used(&board, id(row, col), BoardArea::ALL);
-        let free: BTreeSet<u8> = get_universe().difference(&used).cloned().collect();
+        let free: BTreeSet<u8> = U.difference(&used).cloned().collect();
         for value in &free {
           if missing.contains(&value) {
             candidates.entry(*value).or_default().push(id(row, col));
@@ -287,7 +289,7 @@ fn solve(board: &mut [u8], verbose: bool) -> usize {
         let pos = start + 9 * row + col;
         if board[pos] == 0u8 { // unassigned cells only
           let used = get_used(&board, pos, BoardArea::ALL);
-          let free: BTreeSet<u8> = get_universe().difference(&used).cloned().collect();
+          let free: BTreeSet<u8> = U.difference(&used).cloned().collect();
           for value in &free {
             if missing.contains(&value) {
               candidates.entry(*value).or_default().push(pos);
@@ -364,7 +366,7 @@ fn add_heap(heap: &mut BinaryHeap<Branch>, board: Vec<u8>, depth: usize) {
         continue
       }
       let used = get_used(&board, id(row, col), BoardArea::ALL);
-      let free: BTreeSet<u8> = get_universe().difference(&used).cloned().collect();
+      let free: BTreeSet<u8> = U.difference(&used).cloned().collect();
       for v in &free {
         heap.push(
           Branch {
