@@ -26,10 +26,8 @@ lazy_static! {
 
 /// Unflattens a list into an uncompressed game board
 ///
-/// The uncompressed game board is an 81-element Vec
-/// representing the 9x9 board, indexed right-to-left,
-/// then top-down. An unassigned cell holds value 0.
-/// An assigned cell holds the assigned value.
+/// The unflattened game board is an 81-element Vec representing the 9x9 board, indexed left-to-right, then top-down. 
+/// An unassigned cell holds value 0, otherwise it holds the assigned value.
 fn unflatten(list: &[u8]) -> Vec<u8> {
   let mut board = vec![0u8; 81];
   let mut cur: u8 = 0;
@@ -64,7 +62,7 @@ fn unflatten(list: &[u8]) -> Vec<u8> {
 
 /// Flattens a game board into a compressed list
 ///
-/// The compressed list is a variable size Vec containing:
+/// The flattened list is a variable-sized Vec containing:
 /// - The value n in play on the game board
 /// - The number k of occurrences of value n
 /// - The k indices where n occurs in the game board
@@ -166,8 +164,8 @@ fn get_missing(board: &[u8], area: BoardArea, start: usize) -> BTreeSet<u8> {
 
 /// Assign values to unassigned cells in the board
 ///
-/// Multiple rounds of solve may need to be called to solve the entire puzzle
-/// Returns the number of assignments made in this round
+/// Multiple rounds of solve may need to be called to solve the entire puzzle.
+/// Returns the number of assignments made in this round.
 fn solve(board: &mut [u8], verbose: bool) -> usize {
   let mut assigned: usize = 0;
 
@@ -310,7 +308,7 @@ fn solve(board: &mut [u8], verbose: bool) -> usize {
   assigned
 }
 
-/// Returns true if the puzzle is solved
+/// Return true if the puzzle is solved
 fn is_solved(board: &[u8]) -> bool {
   for value in board.iter() {
     if *value == 0u8 {
@@ -477,7 +475,7 @@ fn main() {
   }
   
   // Dynamic programming
-  // Branch on cells with minimal number of free values
+  // Branch on cells with minimal number of free values (cuts)
   if verbose {
     println!("Finished initial solver");
     print_board(&board);
