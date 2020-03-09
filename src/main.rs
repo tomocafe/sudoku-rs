@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use std::collections::BTreeMap;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
+use std::io::{self, Write};
 
 #[derive(PartialEq)]
 enum BoardArea {
@@ -328,6 +329,57 @@ fn is_solved(board: &[u8]) -> bool {
   true
 }
 
+/// Represents a branch for the dynamic programming solver
+#[derive(Clone, Eq, PartialEq)]
+struct Branch {
+  _pos: usize,    // 1D index in the unflattened board
+  _val: u8,       // value to branch on
+  _cut: usize,    // number of possible values to branch on
+  _depth: usize,  // branch depth
+  _board: Vec<u8>
+}
+// 1. _cut, ascending
+// 2. _depth, descending
+// 3. _pos, ascending
+// 4. _val, ascending
+impl Ord for Branch {
+  fn cmp(&self, other: &Branch) -> Ordering {
+    other._cut.cmp(&self._cut)
+      .then_with(|| self._depth.cmp(&other._depth))
+      .then_with(|| other._pos.cmp(&self._pos))
+      .then_with(|| other._val.cmp(&self._val))
+  }
+}
+impl PartialOrd for Branch {
+  fn partial_cmp(&self, other: &Branch) -> Option<Ordering> {
+      Some(self.cmp(other))
+  }
+}
+
+/// Add branches to the heap
+fn add_heap(heap: &mut BinaryHeap<Branch>, board: Vec<u8>, depth: usize) {
+  for row in 0..9 {
+    for col in 0..9 {
+      if board[id(row, col)] != 0u8 {
+        continue
+      }
+      let used = get_used(&board, id(row, col), BoardArea::ALL);
+      let free: BTreeSet<u8> = get_universe().difference(&used).cloned().collect();
+      for v in &free {
+        heap.push(
+          Branch {
+            _pos: id(row, col),
+            _val: *v,
+            _cut: free.len(),
+            _depth: depth,
+            _board: board.clone()
+          }
+        );
+      }
+    }
+  }
+}
+
 fn main() {
   let args = clap::App::new("sudoku")
     .arg(clap::Arg::with_name("seed")
@@ -390,6 +442,13 @@ fn main() {
   if ! args.is_present("seed") {
     println!("Game seed is {}", seed);
   }
+  else if verbose {
+    let rebuilt_list = flatten(&board);
+    let rebuilt_seed = base64::encode(&rebuilt_list).to_string();
+    if rebuilt_seed != seed {
+      println!("Canonical form of game seed is {}", rebuilt_seed);
+    }
+  }
 
   if verbose {
     println!("Printing board indices");
@@ -404,15 +463,6 @@ fn main() {
 
   // Print the initial board state
   print_board(&board);
-
-  // Testing: rebuild the list and seed
-  if verbose {
-    let rebuilt_list = flatten(&board);
-    let rebuilt_seed = base64::encode(&rebuilt_list).to_string();
-    if rebuilt_seed != seed {
-      println!("Canonical form of game seed is {}", rebuilt_seed);
-    }
-  }
 
   let mut round: usize = 0;
   let mut assigned: usize = 1;
@@ -438,59 +488,26 @@ fn main() {
     println!("Starting dynamic programming");
   }
 
-  /// Represents a branch for the dynamic programming solver
-  #[derive(Clone, Eq, PartialEq)]
-  struct Branch {
-    _pos: usize,
-    _val: u8,
-    _cut: usize,
-    _depth: usize,
-    _board: Vec<u8>
-  }
-  // 1. _depth, descending
-  // 2. _cut, ascending
-  // 3. _pos, ascending
-  // 4. _val, ascending
-  impl Ord for Branch {
-    fn cmp(&self, other: &Branch) -> Ordering {
-      self._depth.cmp(&other._depth)
-        .then_with(|| other._cut.cmp(&self._cut))
-        .then_with(|| other._pos.cmp(&self._pos))
-        .then_with(|| other._val.cmp(&self._val))
-    }
-  }
-  impl PartialOrd for Branch {
-    fn partial_cmp(&self, other: &Branch) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-  }
-
   // Populate priority queue of cells to branch on
   let mut pq = BinaryHeap::new();
-  for row in 0..9 {
-    for col in 0..9 {
-      if board[id(row, col)] != 0u8 {
-        continue
-      }
-      let used = get_used(&board, id(row, col), BoardArea::ALL);
-      let free: BTreeSet<u8> = get_universe().difference(&used).cloned().collect();
-      for v in &free {
-        pq.push(
-          Branch {
-            _pos: id(row, col),
-            _val: *v,
-            _cut: free.len(),
-            _depth: 0,
-            _board: board.clone()
-          }
-        );
-      }
-    }
-  }
+  add_heap(&mut pq, board, 0);
 
+  let mut heartbeat: usize = 0;
+  const INTERVAL: usize = 20;
   while let Some(Branch {_pos, _val, _cut, _depth, mut _board}) = pq.pop() {
     if verbose {
       println!("Branch depth {}: set [{}] to {} (of {})", _depth, _pos, _val, _cut);
+    }
+    else {
+      heartbeat += 1;
+      if heartbeat == INTERVAL {
+        print!("Thinking really hard ");
+        io::stdout().flush().unwrap();
+      }
+      else if heartbeat > INTERVAL && heartbeat % INTERVAL == 0 {
+        print!(".");
+        io::stdout().flush().unwrap();
+      }
     }
     _board[_pos] = _val;
     assigned = 1;
@@ -498,29 +515,17 @@ fn main() {
       assigned = solve(&mut _board, false /*verbose*/);
     }
     if is_solved(&_board) {
+      if heartbeat >= INTERVAL {
+        println!();
+      }
+      println!("Finished solver, puzzle is solved.");
       print_board(&_board);
       std::process::exit(0);
     }
-    for row in 0..9 {
-      for col in 0..9 {
-        if _board[id(row, col)] != 0u8 {
-          continue
-        }
-        let used = get_used(&_board, id(row, col), BoardArea::ALL);
-        let free: BTreeSet<u8> = get_universe().difference(&used).cloned().collect();
-        for v in &free {
-          pq.push(
-            Branch {
-              _pos: id(row, col),
-              _val: *v,
-              _cut: free.len(),
-              _depth: _depth + 1,
-              _board: _board.clone()
-            }
-          );
-        }
-      }
-    }
+    add_heap(&mut pq, _board, _depth + 1);
+  }
+  if heartbeat >= INTERVAL {
+    println!();
   }
   println!("Could not solve this puzzle.");
 }
