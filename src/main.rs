@@ -116,13 +116,11 @@ fn get_col_start(i: usize) -> usize {
 
 /// Given a 1D index, return the index of the top-left element in that region
 fn get_region_start(i: usize) -> usize {
-  // {0, 27, 54}   + {0, 3, 6}
+  // {0, 27, 54}  + {0, 3, 6}
   ((i / 27) * 27) + (((i % 9) / 3) * 3)
 }
 
-/// Return a set of used values in the scope of the given cell
-///
-/// Checks the cell's row, column, and region
+/// Return the set of used values in the scope of the given cell
 fn get_used(board: &[u8], i: usize, area: BoardArea) -> BTreeSet<u8> {
   let mut used: BTreeSet<u8> = BTreeSet::new();
   // Accumulate along row
@@ -160,10 +158,7 @@ fn get_used(board: &[u8], i: usize, area: BoardArea) -> BTreeSet<u8> {
   used
 }
 
-/// Return a set of missing values in a given region
-///
-/// `area` can be `ROW`, `COL`, or `REGION`
-/// `start` must be a valid starting index of the corresponding area
+/// Return the set of missing values in the scope of the given cell
 fn get_missing(board: &[u8], area: BoardArea, start: usize) -> BTreeSet<u8> {
   let used: BTreeSet<u8> = get_used(&board, start, area);
   U.difference(&used).cloned().collect()
@@ -210,9 +205,7 @@ fn solve(board: &mut [u8], verbose: bool) -> usize {
     let mut candidates: BTreeMap<u8, Vec<usize>> = BTreeMap::new();
     for col in 0..9 {
       if board[id(row, col)] == 0u8 { // unassigned cells only
-        let used = get_used(&board, id(row, col), BoardArea::ALL);
-        let free: BTreeSet<u8> = U.difference(&used).cloned().collect();
-        for value in &free {
+        for value in &get_missing(&board, BoardArea::ALL, id(row, col)) {
           if missing.contains(&value) {
             candidates.entry(*value).or_default().push(id(row, col));
           }
@@ -248,9 +241,7 @@ fn solve(board: &mut [u8], verbose: bool) -> usize {
     let mut candidates: BTreeMap<u8, Vec<usize>> = BTreeMap::new();
     for row in 0..9 {
       if board[id(row, col)] == 0u8 { // unassigned cells only
-        let used = get_used(&board, id(row, col), BoardArea::ALL);
-        let free: BTreeSet<u8> = U.difference(&used).cloned().collect();
-        for value in &free {
+        for value in &get_missing(&board, BoardArea::ALL, id(row, col)) {
           if missing.contains(&value) {
             candidates.entry(*value).or_default().push(id(row, col));
           }
@@ -288,9 +279,7 @@ fn solve(board: &mut [u8], verbose: bool) -> usize {
       for col in 0..3 {
         let pos = start + 9 * row + col;
         if board[pos] == 0u8 { // unassigned cells only
-          let used = get_used(&board, pos, BoardArea::ALL);
-          let free: BTreeSet<u8> = U.difference(&used).cloned().collect();
-          for value in &free {
+          for value in &get_missing(&board, BoardArea::ALL, pos) {
             if missing.contains(&value) {
               candidates.entry(*value).or_default().push(pos);
             }
@@ -408,6 +397,7 @@ fn main() {
       .short("-v")
       .long("--verbose")
       .help("show solver steps")
+      .multiple(true)
       .takes_value(false))
     .group(clap::ArgGroup::with_name("input")
       .args(&["seed", "list", "board"])
@@ -415,7 +405,8 @@ fn main() {
       .multiple(false))
     .get_matches();
 
-  let verbose: bool = args.is_present("verbose");
+  let verbose = args.is_present("verbose");
+  let verbosity = args.occurrences_of("verbose");
 
   // Generate the seed, flattened list, and unflattened board
   let seed: String;
@@ -460,7 +451,7 @@ fn main() {
       }
       println!();
     }
-    println!("---");
+    println!();
   }
 
   // Print the initial board state
@@ -495,7 +486,7 @@ fn main() {
   add_heap(&mut pq, board, 0);
 
   let mut heartbeat: usize = 0;
-  const INTERVAL: usize = 20;
+  const INTERVAL: usize = 50;
   while let Some(Branch {_pos, _val, _cut, _depth, mut _board}) = pq.pop() {
     if verbose {
       println!("Branch depth {}: set [{}] to {} (of {})", _depth, _pos, _val, _cut);
@@ -514,7 +505,7 @@ fn main() {
     _board[_pos] = _val;
     assigned = 1;
     while assigned > 0 && ! is_solved(&_board) {
-      assigned = solve(&mut _board, false /*verbose*/);
+      assigned = solve(&mut _board, verbosity > 1);
     }
     if is_solved(&_board) {
       if heartbeat >= INTERVAL {
