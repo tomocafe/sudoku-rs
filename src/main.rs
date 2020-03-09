@@ -438,20 +438,25 @@ fn main() {
     println!("Starting dynamic programming");
   }
 
-  // TODO: move below into function
-  // DFS with depth of branch
-  // How to store trial board states? (unflattened, flattened, seed?)
-
-  // Build priority queue (min-heap) of cells to branch on
-  #[derive(Copy, Clone, Eq, PartialEq)]
+  /// Represents a branch for the dynamic programming solver
+  #[derive(Clone, Eq, PartialEq)]
   struct Branch {
     _pos: usize,
-    _free: usize
+    _val: u8,
+    _cut: usize,
+    _depth: usize,
+    _board: Vec<u8>
   }
+  // 1. _depth, descending
+  // 2. _cut, ascending
+  // 3. _pos, ascending
+  // 4. _val, ascending
   impl Ord for Branch {
     fn cmp(&self, other: &Branch) -> Ordering {
-      other._free.cmp(&self._free)
+      self._depth.cmp(&other._depth)
+        .then_with(|| other._cut.cmp(&self._cut))
         .then_with(|| other._pos.cmp(&self._pos))
+        .then_with(|| other._val.cmp(&self._val))
     }
   }
   impl PartialOrd for Branch {
@@ -459,6 +464,8 @@ fn main() {
         Some(self.cmp(other))
     }
   }
+
+  // Populate priority queue of cells to branch on
   let mut pq = BinaryHeap::new();
   for row in 0..9 {
     for col in 0..9 {
@@ -467,16 +474,53 @@ fn main() {
       }
       let used = get_used(&board, id(row, col), BoardArea::ALL);
       let free: BTreeSet<u8> = get_universe().difference(&used).cloned().collect();
-      pq.push(Branch {_pos: id(row, col), _free: free.len()});
+      for v in &free {
+        pq.push(
+          Branch {
+            _pos: id(row, col),
+            _val: *v,
+            _cut: free.len(),
+            _depth: 0,
+            _board: board.clone()
+          }
+        );
+      }
     }
   }
 
-  //
-  while let Some(Branch {_pos, _free}) = pq.pop() {
-    let used = get_used(&board, _pos, BoardArea::ALL);
-    let free: BTreeSet<u8> = get_universe().difference(&used).cloned().collect();
+  while let Some(Branch {_pos, _val, _cut, _depth, mut _board}) = pq.pop() {
     if verbose {
-      println!("Position [{}] has {} free values: {:?}", _pos, _free, free);
+      println!("Branch depth {}: set [{}] to {} (of {})", _depth, _pos, _val, _cut);
+    }
+    _board[_pos] = _val;
+    assigned = 1;
+    while assigned > 0 && ! is_solved(&_board) {
+      assigned = solve(&mut _board, false /*verbose*/);
+    }
+    if is_solved(&_board) {
+      print_board(&_board);
+      std::process::exit(0);
+    }
+    for row in 0..9 {
+      for col in 0..9 {
+        if _board[id(row, col)] != 0u8 {
+          continue
+        }
+        let used = get_used(&_board, id(row, col), BoardArea::ALL);
+        let free: BTreeSet<u8> = get_universe().difference(&used).cloned().collect();
+        for v in &free {
+          pq.push(
+            Branch {
+              _pos: id(row, col),
+              _val: *v,
+              _cut: free.len(),
+              _depth: _depth + 1,
+              _board: _board.clone()
+            }
+          );
+        }
+      }
     }
   }
+  println!("Could not solve this puzzle.");
 }
