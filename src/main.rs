@@ -406,7 +406,10 @@ fn main() {
     .get_matches();
 
   let verbose = args.is_present("verbose");
-  let verbosity = args.occurrences_of("verbose");
+  let verbosity = args.occurrences_of("verbose"); // e.g. -vvv
+  // 1 = main messages
+  // 2 = 1 + initial solver messages
+  // 3 = 2 + dynamic solver messages
 
   // Generate the seed, flattened list, and unflattened board
   let seed: String;
@@ -461,10 +464,10 @@ fn main() {
   let mut assigned: usize = 1;
   while assigned > 0 && ! is_solved(&board) {
     round += 1;
+    assigned = solve(&mut board, verbosity > 1);
     if verbose {
-      println!("Round {}", round);
+      println!("Round {} assigned {} cells", round, assigned);
     }
-    assigned = solve(&mut board, verbose);
   }
 
   if is_solved(&board) {
@@ -505,7 +508,7 @@ fn main() {
     _board[_pos] = _val;
     assigned = 1;
     while assigned > 0 && ! is_solved(&_board) {
-      assigned = solve(&mut _board, verbosity > 1);
+      assigned = solve(&mut _board, verbosity > 2);
     }
     if is_solved(&_board) {
       if heartbeat >= INTERVAL {
