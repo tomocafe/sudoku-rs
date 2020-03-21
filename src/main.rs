@@ -172,16 +172,17 @@ fn solve(board: &mut [u8], verbose: bool) -> usize {
   // Find used/free values for all cells
   for row in 0..9 {
     for col in 0..9 {
-      let used = get_used(&board, id(row, col), BoardArea::ALL);
-      let free: BTreeSet<u8> = U.difference(&used).cloned().collect();
-      if verbose {
-        println!("At scope of ({},{}) [{}], used: {:?}, free: {:?}", row, col, id(row, col), used, free);
-      }
-      if board[id(row, col)] == 0u8 && free.len() == 1 {
-        board[id(row, col)] = *free.iter().next().unwrap();
-        assigned += 1;
+      if board[id(row, col)] == 0u8 { // unassigned cells only
+        let free = get_missing(&board, BoardArea::ALL, id(row, col));
         if verbose {
-          println!("Assign [{}] to {}", id(row, col), board[id(row, col)]);
+          println!("At scope of [{}], free: {:?}", id(row, col), free);
+        }
+        if free.len() == 1 {
+          board[id(row, col)] = *free.iter().next().unwrap();
+          assigned += 1;
+          if verbose {
+            println!("Assign [{}] to {}", id(row, col), board[id(row, col)]);
+          }
         }
       }
     }
@@ -312,6 +313,24 @@ fn solve(board: &mut [u8], verbose: bool) -> usize {
 fn is_solved(board: &[u8]) -> bool {
   for value in board.iter() {
     if *value == 0u8 {
+      return false;
+    }
+  }
+  true
+}
+
+/// Returns true if the puzzle is legal
+fn is_legal(board: &Vec<u8>) -> bool {
+  for pos in 0..81 {
+    let value = board[pos];
+    if value == 0u8 {
+      continue;
+    }
+    // Temporarily unassign pos to check if the value is still used in the same scope (illegal)
+    let mut b = board.clone();
+    b[pos] = 0u8;
+    let used = get_used(&b, pos, BoardArea::ALL);
+    if used.contains(&value) {
       return false;
     }
   }
@@ -473,6 +492,11 @@ fn main() {
     std::process::exit(1);
   }
 
+  if ! is_legal(&board) {
+    println!("Illegal starting state");
+    std::process::exit(1);
+  }
+
   if verbose {
     println!("Printing board indices");
     for row in 0..9 {
@@ -500,6 +524,14 @@ fn main() {
   if is_solved(&board) {
     println!("Finished solver, puzzle is solved.");
     print_board(&board);
+    if verbose {
+      if is_legal(&board) {
+        println!("Solution is legal.");
+      }
+      else {
+        println!("Solution is illegal!");
+      }
+    }
     std::process::exit(0);
   }
   
@@ -543,6 +575,14 @@ fn main() {
       }
       println!("Finished solver, puzzle is solved.");
       print_board(&_board);
+      if verbose {
+        if is_legal(&_board) {
+          println!("Solution is legal.");
+        }
+        else {
+          println!("Solution is illegal!");
+        }
+      }
       std::process::exit(0);
     }
     add_heap(&mut pq, _board, _depth + 1);
