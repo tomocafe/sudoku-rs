@@ -318,6 +318,28 @@ fn is_solved(board: &[u8]) -> bool {
   true
 }
 
+/// Return the number of assigned cells in the board
+fn get_num_assigned(board: &[u8]) -> usize {
+  let mut ct = 0;
+  for value in board.iter() {
+    if *value != 0u8 {
+      ct += 1;
+    }
+  }
+  ct
+}
+
+/// Returns a mapping of values to the count of assignments of the value
+fn get_value_counts(board: &[u8]) -> BTreeMap<u8, usize> {
+  let mut counts: BTreeMap<u8, usize> = BTreeMap::new();
+  for value in board.iter() {
+    if *value != 0u8 {
+      *counts.entry(*value).or_insert(0) += 1;
+    }
+  }
+  counts
+}
+
 /// Represents a branch for the dynamic programming solver
 #[derive(Clone, Eq, PartialEq)]
 struct Branch {
@@ -442,6 +464,13 @@ fn main() {
     if rebuilt_seed != seed {
       println!("Canonical form of game seed is {}", rebuilt_seed);
     }
+  }
+
+  // Minimum 17 clues per arxiv.org/abs/1201.0749
+  // Each value 0-9 must appear in the input state
+  if get_num_assigned(&board) < 17 || get_value_counts(&board).len() < 9 {
+    println!("Game is unsolvable");
+    std::process::exit(1);
   }
 
   if verbose {
